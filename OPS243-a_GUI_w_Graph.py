@@ -176,11 +176,14 @@ class OPS243GUI:
             tk.Label(record_mode_frame, text="Record Mode: ").pack(side="left")
             tk.Radiobutton(record_mode_frame, text="Instantaneous", variable=self.record_mode, value="Instantaneous").pack(side="left")
             tk.Radiobutton(record_mode_frame, text="Average", variable=self.record_mode, value="Average").pack(side="left")
+            tk.Radiobutton(record_mode_frame, text="Both", variable=self.record_mode, value="Both").pack(side="left")  # Add option for both
 
             self.fig, self.ax = plt.subplots(figsize=(6, 4))
             self.ax.set_xlabel('Time (s)')
             self.ax.set_ylabel(f'Speed ({self.display_unit})')
-            self.line, = self.ax.plot([], [], 'b-')
+            self.line_instant, = self.ax.plot([], [], 'b-', label='Instantaneous')  # Blue line for instantaneous
+            self.line_avg, = self.ax.plot([], [], 'r-', label='Average')  # Red line for average
+            self.ax.legend()
             self.graph_canvas = FigureCanvasTkAgg(self.fig, master=self.graph_tab)
             self.graph_canvas.get_tk_widget().pack(fill='both', expand=True)
 
@@ -418,7 +421,16 @@ class OPS243GUI:
                             self.graph_start_time = time.time()
                         elapsed_time = time.time() - self.graph_start_time
                         timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                        self.graph_data.append({'Time': elapsed_time, 'Speed': speed_display, 'Timestamp': timestamp})
+                        if self.record_mode.get() == "Instantaneous":
+                            self.graph_data.append({'Time': elapsed_time, 'Speed': speed_display, 'Timestamp': timestamp})
+                        elif self.record_mode.get() == "Average":
+                            avg_speed = sum(speed for _, speed in self.speed_values) / len(self.speed_values)
+                            avg_speed_display, _ = self.convert_speed(avg_speed)
+                            self.graph_data.append({'Time': elapsed_time, 'Speed': avg_speed_display, 'Timestamp': timestamp})
+                        elif self.record_mode.get() == "Both":
+                            avg_speed = sum(speed for _, speed in self.speed_values) / len(self.speed_values)
+                            avg_speed_display, _ = self.convert_speed(avg_speed)
+                            self.graph_data.append({'Time': elapsed_time, 'Speed': speed_display, 'Avg_Speed': avg_speed_display, 'Timestamp': timestamp})
                         self.root.after(0, self.update_graph)
                 else:
                     # Invalid data received; skip updating the GUI
@@ -480,7 +492,10 @@ class OPS243GUI:
         try:
             times = [data['Time'] for data in self.graph_data]
             speeds = [data['Speed'] for data in self.graph_data]
-            self.line.set_data(times, speeds)
+            self.line_instant.set_data(times, speeds)
+            if self.record_mode.get() == "Both":
+                avg_speeds = [data['Avg_Speed'] for data in self.graph_data]
+                self.line_avg.set_data(times, avg_speeds)
             self.ax.relim()
             self.ax.autoscale_view()
             self.graph_canvas.draw()
@@ -494,7 +509,10 @@ class OPS243GUI:
             self.graph_data = []
             self.graph_start_time = time.time()
             filename_prefix = self.filename_prefix_entry.get()
-            self.filename = f"{filename_prefix}_speed_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            # Create a directory for saved files if it doesn't exist
+            save_dir = os.path.join(os.getcwd(), "saved_graphs")
+            os.makedirs(save_dir, exist_ok=True)
+            self.filename = os.path.join(save_dir, f"{filename_prefix}_speed_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
             print(f"Recording started. Data will be saved to {self.filename}")
         except Exception as e:
             print(f"Exception in start_recording: {e}")
@@ -504,7 +522,7 @@ class OPS243GUI:
         try:
             self.recording = False
             if self.graph_data:
-                filepath = os.path.join(os.getcwd(), self.filename)
+                filepath = self.filename
                 # Save to CSV
                 with open(filepath, 'w', newline='') as csvfile:
                     fieldnames = ['Time (s)', f'Speed ({self.display_unit})', 'Timestamp']
@@ -583,18 +601,20 @@ class OPS243GUI:
     def save_settings(self):
         try:
             # Implement the logic to save the current settings to the radar
-            self.send_command("A!")  # Example command to save settings
+            self.send_command("A!")  # Correct command to save settings
             messagebox.showinfo("Save Settings", "Settings saved to radar.")
         except Exception as e:
+            messagebox.showerror("Save Error", f"Failed to save settings:\n{e}")
             print(f"Exception in save_settings: {e}")
             traceback.print_exc()
 
     def reset_settings(self):
         try:
             # Implement the logic to reset the radar settings
-            self.send_command("P!")  # Example command to reset settings
+            self.send_command("P!")  # Correct command to reset settings
             messagebox.showinfo("Reset Settings", "Radar settings reset.")
         except Exception as e:
+            messagebox.showerror("Reset Error", f"Failed to reset settings:\n{e}")
             print(f"Exception in reset_settings: {e}")
             traceback.print_exc()
 
